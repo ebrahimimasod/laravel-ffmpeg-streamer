@@ -13,6 +13,7 @@ class Media extends Model
         'name',
         'path',
         'visibility',
+        'converted_for_streaming_at',
     ];
 
 
@@ -25,9 +26,7 @@ class Media extends Model
         });
     }
 
-    /**
-     * Get the URL to access the file.
-     */
+
     public function getUrlAttribute(): string
     {
         return Storage::url($this->path);

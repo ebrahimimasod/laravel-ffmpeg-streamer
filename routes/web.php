@@ -24,15 +24,10 @@ Route::middleware('auth')->group(function () {
     Route::delete('/delete/{uuid}', [MediaController::class, 'destroy'])->name('media.destroy');
 });
 
-// Redirect root to dashboard if authenticated, else to login
 Route::get('/', function () {
     return redirect()->route(auth()->check() ? 'dashboard' : 'login');
 });
 
-Route::get('/test', function () {
-    return view('test');
-});
 
 
-Route::get('/stream/{uuid}/', [MediaController::class, 'stream']);
-
+Route::get('/stream/{uuid}/', [MediaController::class, 'stream'])->name('stream');

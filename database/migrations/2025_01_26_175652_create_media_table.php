@@ -16,6 +16,7 @@ return new class extends Migration
             $table->uuid()->unique();
             $table->string('name');
             $table->string('path');
+            $table->timestamp('converted_for_streaming_at')->nullable();
             $table->enum('visibility', ['public', 'private'])->default('private');
             $table->timestamps();
         });

@@ -10,14 +10,29 @@
 <body>
 
 
+<audio id="audioPlayer" controls></audio>
 
-
-<audio controls oncontextmenu="return false;">
-    <source src="http://localhost:8000/stream/466993f2-678f-4cfe-abdf-98b1b7196927 " type="audio/mpeg">
-    Your browser does not support the audio element.
-</audio>
-
-
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        var audio = document.getElementById('audioPlayer');
+        if (Hls.isSupported()) {
+            var hls = new Hls();
+            // آدرس فایل m3u8 که کنترلر برمی‌گرداند
+            hls.loadSource('{{ route("stream", ["uuid" => $media->uuid]) }}');
+            hls.attachMedia(audio);
+            hls.on(Hls.Events.MANIFEST_PARSED, function () {
+                audio.play();
+            });
+        } else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
+            // برای مرورگرهایی که به صورت بومی پشتیبانی می‌کنند (مثل سافاری)
+            audio.src = '{{ route("stream", ["uuid" => $media->uuid]) }}';
+            audio.addEventListener('loadedmetadata', function() {
+                audio.play();
+            });
+        }
+    });
+</script>
 
 </body>
 </html>

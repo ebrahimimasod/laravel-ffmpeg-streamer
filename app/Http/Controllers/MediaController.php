@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ConvertAudioForStreaming;
 use App\Models\Media;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
+use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
 
 class MediaController extends Controller
 {
@@ -30,11 +33,15 @@ class MediaController extends Controller
         $uploadedFile = $request->file('file');
         $path = $uploadedFile->store('uploads', 'public'); // Store in 'public/uploads'
 
-        Media::create([
+        $media = Media::create([
             'name' => $uploadedFile->getClientOriginalName(),
             'path' => $path,
             'visibility' => $request->visibility,
         ]);
+
+
+       dispatch(new ConvertAudioForStreaming($media->id));
+
 
         return redirect()->route('dashboard')->with('success', 'File uploaded successfully.');
     }
@@ -67,40 +74,39 @@ class MediaController extends Controller
         return redirect()->route('dashboard')->with('success', 'File deleted successfully.');
     }
 
-    public function stream($uuid)
+    public function stream(Request $request, $uuid, $segment = null)
     {
 
-        // Retrieve the media file
-        $file = Media::where('uuid', $uuid)->firstOrFail();
+        $media = Media::where('uuid', $uuid)->firstOrFail();
 
-        // Access Control
-        if ($file->visibility === 'private') {
-            // Ensure the authenticated user is the owner of the file
-//            if ($file->user_id !== Auth::id()) {
-//                abort(403, 'Unauthorized access to this file.');
-//            }
+        // اگر segment خالی باشد یعنی خود فایل m3u8 می‌خواهیم
+        if (!$segment) {
+
+            $m3u8Path =  storage_path("/app/private/hls/{$media->uuid}.m3u8");
+
+            $content = Storage::disk('local')->get($m3u8Path);
+
+            // اگر نیاز است لینک‌های داخل m3u8 را داینامیک کنید، می‌توانید با str_replace آدرس فایل‌های .ts را اصلاح کنید
+            // مثلا:
+            // $content = str_replace("segment0.ts", route('stream.segment', ['uuid' => $uuid, 'segment' => 'segment0.ts']), $content);
+
+            return response($content, 200, [
+                'Content-Type' => 'application/vnd.apple.mpegurl',
+            ]);
+        } else {
+            // اگر segment ست شده یعنی درخواست فایل TS است
+//            $tsPath = "hls/{$media->uuid}/{$segment}"; // بسته به ساختار
+            $tsPath =  storage_path("/app/private/hls/{$media->uuid}/$segment");
+
+            if (!Storage::disk('local')->exists($tsPath)) {
+                abort(404, 'Segment not found');
+            }
+
+            $content = Storage::disk('local')->get($tsPath);
+
+            return response($content, 200, [
+                'Content-Type' => 'video/mp2t', // پسوند TS
+            ]);
         }
-
-        // Check if the file exists in storage
-        if (!Storage::disk('public')->exists($file->path)) {
-            abort(404, 'File not found.');
-        }
-
-        // Open the file as a stream
-        $stream = Storage::disk('public')->readStream($file->path);
-
-        // Determine the MIME type
-        $mime = Storage::disk('public')->mimeType($file->path);
-
-        // Create the streamed response
-        return response()->stream(function () use ($stream) {
-            fpassthru($stream);
-        }, 200, [
-            'Content-Type' => $mime,
-            'Content-Disposition' => 'inline; filename="' . basename($file->name) . '"',
-            'Cache-Control' => 'no-cache, no-store, must-revalidate',
-            'Pragma' => 'no-cache',
-            'Expires' => '0',
-        ]);
     }
 }
