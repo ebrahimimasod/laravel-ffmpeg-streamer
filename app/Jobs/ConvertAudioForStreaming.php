@@ -5,8 +5,8 @@ namespace App\Jobs;
 use App\Models\Media;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
-use FFMpeg\Format\Audio\Mp3;
 
 
 class ConvertAudioForStreaming implements ShouldQueue
@@ -25,19 +25,20 @@ class ConvertAudioForStreaming implements ShouldQueue
     public function handle(): void
     {
         $media = Media::query()->find($this->mediaId);
-        $outputPath = storage_path("/app/private/hls/{$media->uuid}.m3u8");
-        $lowBitrateFormat = (new Mp3())->setAudioKiloBitrate(64);
-        $audioPath = storage_path($media->path);
+        $mp3Path = Storage::disk('local')->path($media->path);
+//        $hlsPath = Storage::disk('local')->path("files/$media->uuid/hls/playlist.m3u8");
+//        $command = "C:/ffmpeg/bin/ffmpeg.exe -y -fflags +genpts -i {$mp3Path}  -c:a aac -b:a 320k  -avoid_negative_ts make_zero  -hls_time 10  -hls_playlist_type vod  -hls_flags independent_segments    -f hls    -hls_segment_filename \"{$hlsPath}/track_%05d.ts\"  {$hlsPath}/playlist.m3u8";
+
+//        exec($command);
+//        //C:/ffmpeg/bin/ffmpeg.exe -y -fflags +genpts -i "D:/projects/downloader-app/storage/app/private/uploads/input.mp3"    -c:a aac -b:a 320k    -avoid_negative_ts make_zero   -hls_time 10   -hls_playlist_type vod    -hls_flags independent_segments    -f hls    -hls_segment_filename "D:/projects/downloader-app/storage/app/private/hls/segments/track_%05d.ts"    "D:/projects/downloader-app/storage/app/private/hls/playlist.m3u8
 
         FFmpeg::fromDisk('local')
-        ->open($audioPath)
+            ->open($media->path)
             ->exportForHLS()
-            ->addFormat($lowBitrateFormat)
-            ->toDisk('local')
-            ->save($outputPath);
+            ->setSegmentLength(10)
+            ->addFormat((new \FFMpeg\Format\Audio\Mp3())->setAudioKiloBitrate(320))
+            ->save("files/$media->uuid/hls/playlist.m3u8");
 
-        // با این کار، در کنار فایل m3u8 چندین فایل .ts هم تولید می‌شود
-        // می‌توانید آن‌ها را در مسیر دلخواه قرار دهید
 
     }
 }

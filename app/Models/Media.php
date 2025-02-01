@@ -17,14 +17,6 @@ class Media extends Model
     ];
 
 
-    protected static function boot()
-    {
-        parent::boot();
-
-        static::creating(function ($model) {
-            $model->uuid = (string) Str::uuid();
-        });
-    }
 
 
     public function getUrlAttribute(): string

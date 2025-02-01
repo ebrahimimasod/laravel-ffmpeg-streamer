@@ -7,60 +7,47 @@ use App\Models\Media;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 use ProtoneMedia\LaravelFFMpeg\Support\FFMpeg;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class MediaController extends Controller
 {
-    /**
-     * Display the dashboard with the list of media files.
-     */
     public function index()
     {
         $mediaFiles = Media::latest()->paginate(10); // Paginate for better UX
         return view('dashboard', compact('mediaFiles'));
     }
 
-    /**
-     * Handle the file upload.
-     */
     public function upload(Request $request)
     {
         $request->validate([
             'file' => 'required|file|max:102400', // Max 100MB
             'visibility' => 'required|in:public,private',
         ]);
-
+        $uuid = (string)Str::uuid();
         $uploadedFile = $request->file('file');
-        $path = $uploadedFile->store('uploads', 'public'); // Store in 'public/uploads'
+        $path = $uploadedFile->store("files/$uuid/map3", 'local'); // Store in 'public/uploads'
 
         $media = Media::create([
             'name' => $uploadedFile->getClientOriginalName(),
+            'uuid' => $uuid,
             'path' => $path,
             'visibility' => $request->visibility,
         ]);
 
-
-       dispatch(new ConvertAudioForStreaming($media->id));
-
+        dispatch(new ConvertAudioForStreaming($media->id));
 
         return redirect()->route('dashboard')->with('success', 'File uploaded successfully.');
     }
 
-    /**
-     * Download the specified file.
-     */
     public function download($uuid)
     {
         $media = Media::where('uuid', $uuid)->firstOrFail();
 
-        // Optionally, check for visibility or permissions here
-
-        return Storage::disk('public')->download($media->path, $media->name);
+        return Storage::disk('local')->download($media->path, $media->name);
     }
 
-    /**
-     * Delete the specified file.
-     */
     public function destroy($uuid)
     {
         $media = Media::where('uuid', $uuid)->firstOrFail();
@@ -74,39 +61,50 @@ class MediaController extends Controller
         return redirect()->route('dashboard')->with('success', 'File deleted successfully.');
     }
 
-    public function stream(Request $request, $uuid, $segment = null)
+
+    /**
+     * Streams an HLS file (playlist or TS segment) from storage.
+     *
+     * @param \Illuminate\Http\Request $request
+     * @param string $folder The folder ID (e.g. ecf309c2-39a4-46ce-80a9-58213195f847)
+     * @param string $file The file name (playlist.m3u8, or a TS segment)
+     * @return \Symfony\Component\HttpFoundation\BinaryFileResponse
+     */
+    public function stream(Request $request, $folder, $file='playlist.m3u8')
     {
+        // Build the full path.
+        // Adjust the path if your folder structure is different.
 
-        $media = Media::where('uuid', $uuid)->firstOrFail();
+        $path = Storage::disk('local')->path("/files/{$folder}/hls/{$file}");
 
-        // اگر segment خالی باشد یعنی خود فایل m3u8 می‌خواهیم
-        if (!$segment) {
-
-            $m3u8Path =  storage_path("/app/private/hls/{$media->uuid}.m3u8");
-
-            $content = Storage::disk('local')->get($m3u8Path);
-
-            // اگر نیاز است لینک‌های داخل m3u8 را داینامیک کنید، می‌توانید با str_replace آدرس فایل‌های .ts را اصلاح کنید
-            // مثلا:
-            // $content = str_replace("segment0.ts", route('stream.segment', ['uuid' => $uuid, 'segment' => 'segment0.ts']), $content);
-
-            return response($content, 200, [
-                'Content-Type' => 'application/vnd.apple.mpegurl',
-            ]);
-        } else {
-            // اگر segment ست شده یعنی درخواست فایل TS است
-//            $tsPath = "hls/{$media->uuid}/{$segment}"; // بسته به ساختار
-            $tsPath =  storage_path("/app/private/hls/{$media->uuid}/$segment");
-
-            if (!Storage::disk('local')->exists($tsPath)) {
-                abort(404, 'Segment not found');
-            }
-
-            $content = Storage::disk('local')->get($tsPath);
-
-            return response($content, 200, [
-                'Content-Type' => 'video/mp2t', // پسوند TS
-            ]);
+        // Check if the file exists
+        if (!file_exists($path)) {
+            abort(404, 'File not found.');
         }
+
+        // Determine the correct MIME type based on file extension.
+        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        $mimeType = 'application/octet-stream';
+
+        if ($extension === 'm3u8') {
+            // For HLS playlists (m3u8 files)
+            $mimeType = 'application/vnd.apple.mpegurl';
+        } elseif ($extension === 'ts') {
+            // For TS segments
+            $mimeType = 'video/MP2T';
+        }
+
+        // Create a BinaryFileResponse which automatically handles streaming the file.
+        return response()->file($path, [
+            'Content-Type' => $mimeType,
+            'Cache-Control' => 'no-cache, must-revalidate', // Optional: disable caching if desired
+        ]);
+    }
+
+
+    public
+    function play($uuid)
+    {
+            return view('play',['uuid'=>$uuid]);
     }
 }
