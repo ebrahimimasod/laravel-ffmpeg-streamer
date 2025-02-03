@@ -15,13 +15,14 @@ return [
     |
     */
 
-    'paths' => ['api/*', 'sanctum/csrf-cookie'],
+    'paths' => ["*"],
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['*'],
+    'allowed_origins' => ['https://noorejan.com', 'https://test.noorejan.com'],
 
     'allowed_origins_patterns' => ['/^https:\/\/.*\.noorejan\.com$/'],
+
 
     'allowed_headers' => ['*'],
 
